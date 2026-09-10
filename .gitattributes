@@ -1,0 +1,3 @@
+*.dll binary
+*.exe binary
+resources/platform-tools/windows/NOTICE.txt -whitespace
