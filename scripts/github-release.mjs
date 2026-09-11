@@ -47,7 +47,6 @@ function main() {
   // 已发布版本不覆盖；失败留下的草稿允许重新上传并完成校验。
   const repo = process.env.GH_REPO
   if (!repo) throw new Error('缺少 GH_REPO')
-  const endpoint = `repos/${repo}/releases/tags/${encodeURIComponent(tag)}`
   const releases = JSON.parse(gh('api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`)).flat()
   const existing = releases.find((release) => release.tag_name === tag)
   if (existing && !existing.draft) throw new Error(`${tag} 已发布，禁止覆盖，请使用新版本 tag`)
@@ -56,7 +55,11 @@ function main() {
       ...(metadata.prerelease ? ['--prerelease'] : []))
   }
   gh('release', 'upload', tag, ...files.map((name) => `release/${name}`), '--clobber')
-  const uploaded = JSON.parse(gh('api', endpoint))
+  // 按 tag 查询只适用于已发布 Release；草稿必须通过列表找到 ID 后读取。
+  const drafts = JSON.parse(gh('api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`)).flat()
+  const draft = drafts.find((release) => release.tag_name === tag && release.draft)
+  if (!draft) throw new Error(`${tag} 的 Release 草稿不存在`)
+  const uploaded = JSON.parse(gh('api', `repos/${repo}/releases/${draft.id}`))
   verifyAssets(uploaded.assets, expected)
   gh('release', 'edit', tag, '--draft=false', `--prerelease=${metadata.prerelease}`,
     ...(metadata.prerelease ? ['--latest=false'] : []))
