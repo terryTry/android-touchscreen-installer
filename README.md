@@ -4,7 +4,7 @@
 Android Platform-Tools，通过固定按钮完成设备连接、APK 安装、应用控制和默认
 Launcher 管理，并提供面向调试人员的手动 ADB 终端。
 
-当前版本：`0.2.1`
+当前版本：`0.2.1-rc.0`
 
 版本变更见 [CHANGELOG](CHANGELOG.md)。
 
@@ -166,3 +166,25 @@ x64 正式安装包。文件传输和日志读取可使用手动 ADB 终端。
 
 本项目采用 [Apache License 2.0](LICENSE)。第三方组件及其许可见
 [第三方软件说明](THIRD_PARTY_NOTICES.md)，相关版权和许可声明随源码及安装包保留。
+
+## GitHub 自动 Release
+
+工作流 `.github/workflows/release.yml` 在推送版本 tag 时运行：
+
+| tag | 发布类型 |
+| --- | --- |
+| `v0.2.2` | 正式 Release |
+| `v0.3.0-rc.1` | Prerelease，不标记为 Latest |
+
+只接受 `vX.Y.Z`、`vX.Y.Z-rc.N`；其他匹配触发通配符的 tag 会在校验阶段失败，不构建或发布。
+推送前必须将 `package.json`、`package-lock.json` 的版本更新为 tag 去掉 `v` 后的值，
+并把工作流及版本变更提交到 tag 指向的提交中。普通分支推送不触发此流程。
+
+流程使用 Windows runner 和 Node.js 24.16.0，执行 `npm ci`、类型检查、测试与 Windows x64 NSIS 构建。
+由 GitHub CLI 发布，electron-builder 禁用自动发布。上传安装包、blockmap 和 `SHA256SUMS.txt` 后，
+核对 GitHub 返回的制品 SHA-256，全部一致才将草稿公开。RC 自动标记为预发布。
+构建通过不代表 Windows 真机安装和设备功能验收通过；当前安装包未签名。
+
+工作流使用仓库自动提供的 `GITHUB_TOKEN`（`contents: write`），无需配置个人访问令牌。
+上传或校验失败会保留草稿，可在 Actions 中重新运行；已经公开的同名 Release 不覆盖，需使用新版本 tag。
+本流程不会自动创建或推送 tag。
