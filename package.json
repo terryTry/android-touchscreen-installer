@@ -1,6 +1,6 @@
 {
   "name": "android-touchscreen-installer",
-  "version": "0.2.1-rc.0",
+  "version": "0.2.1-rc.1",
   "description": "面向现场安装人员的安卓触摸屏 ADB 安装助手",
   "main": "out/main/index.js",
   "type": "module",
