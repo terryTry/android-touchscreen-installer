@@ -9,7 +9,7 @@ describe('ADB 错误中文映射', () => {
     ['INSTALL_FAILED_OLDER_SDK', '低于 APK'],
     ['INSTALL_FAILED_NO_MATCHING_ABIS', 'CPU 架构不兼容'],
     ['INSTALL_PARSE_FAILED_MANIFEST_MALFORMED', 'Manifest 无法解析'],
-    ['adb: error: failed to read copy response', 'adbd 拒绝文件传输'],
+    ['adb: error: failed to read copy response', '连接已中断'],
     ['error: device offline', '连接已中断'],
     ["failed to connect to '192.168.1.20:5555': No route to host", 'TCP/IP 连接失败'],
     ['error: unauthorized', '尚未授权'],

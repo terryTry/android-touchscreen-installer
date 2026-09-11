@@ -18,6 +18,8 @@ import type { ApkInspector } from './apk-inspector'
 import { AppController } from './controller'
 import type { SettingsGateway } from './settings-store'
 
+vi.mock('./file-hash', () => ({ hashFile: vi.fn(async () => 'a'.repeat(64)) }))
+
 vi.mock('./logger', () => ({
   writeApplicationError: vi.fn(),
   writeTechnicalLog: vi.fn()
@@ -152,6 +154,10 @@ class FakeAdb implements AdbGateway {
   restartServerCalls = 0
   installFailure: string | null = null
   pushFailure: string | null = null
+  pushFailuresRemaining = Infinity
+  remoteHash = 'a'.repeat(64)
+  connectionRecoveryFails = false
+  installResponseLost = false
   streamTransferFailure: string | null = null
   streamedFileSize: number | null = null
   developmentSettingsEnabled = '1'
@@ -422,6 +428,8 @@ ${hiddenSystemPaths.map((path) => `  Hidden system package:\n    codePath=${path
       this.grantedPermissions.add(args.at(-1) ?? '')
     } else if (command.startsWith(`shell appops set ${apkInfo.packageName} `)) {
       this.appOps.set(args.at(-2) ?? '', args.at(-1) ?? '')
+    } else if (command.startsWith('shell sha256sum ')) {
+      stdout = `${this.remoteHash}  ${args.at(-1)}\n`
     } else if (command.startsWith('shell stat -c %s ')) {
       stdout = `${this.streamedFileSize ?? apkInfo.fileSize}\n`
     } else if (command.startsWith('shell dd of=')) {
@@ -434,7 +442,7 @@ ${hiddenSystemPaths.map((path) => `  Hidden system package:\n    codePath=${path
     } else if (args[0] === 'push') {
       options.onOutput?.('[ 50%] pushing APK')
       options.onOutput?.('[100%] pushing APK')
-      if (this.pushFailure) {
+      if (this.pushFailure && this.pushFailuresRemaining-- > 0) {
         stderr = this.pushFailure
         exitCode = 1
       } else {
@@ -450,7 +458,8 @@ ${hiddenSystemPaths.map((path) => `  Hidden system package:\n    codePath=${path
           versionName: apkInfo.versionName,
           versionCode: apkInfo.versionCode
         }
-        stdout = 'Success\n'
+        stdout = this.installResponseLost ? '' : 'Success\n'
+        if (this.installResponseLost) { stderr = 'adb: device offline'; exitCode = 1 }
       }
     } else if (command.startsWith('shell cmd package set-home-activity')) {
       this.currentHome = args.at(-1) ?? this.currentHome
@@ -516,7 +525,10 @@ ${hiddenSystemPaths.map((path) => `  Hidden system package:\n    codePath=${path
       this.adbRoot = false
       this.systemWritable = false
     } else if (command === 'get-state') {
-      if (this.rebootChecks === 0) {
+      if (this.connectionRecoveryFails) {
+        stderr = 'device offline'
+        exitCode = 1
+      } else if (this.rebootChecks === 0) {
         this.rebootChecks = 1
         stderr = 'device offline'
         exitCode = 1
@@ -699,6 +711,54 @@ describe('主流程控制器', () => {
     expect(controller.getSnapshot().operation.status).toBe('success')
   })
 
+  it.each([1, 2])('首次连接失败 %i 次后自动恢复，只生成一条成功记录', async (failures) => {
+    const { controller, adb } = createController()
+    activeControllers.push(controller)
+    await controller.initialize()
+    const run = adb.run.bind(adb)
+    let connects = 0
+    vi.spyOn(adb, 'run').mockImplementation(async (args, options) => {
+      if (args[0] === 'connect') {
+        adb.tcpConnectOutput = ++connects <= failures
+          ? 'failed to connect: No route to host'
+          : 'connected to 192.168.1.20:5555'
+      }
+      return run(args, options)
+    })
+    await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
+    expect(connects).toBe(failures + 1)
+    expect(adb.restartServerCalls).toBe(failures === 2 ? 1 : 0)
+    expect(controller.getSnapshot()).toMatchObject({
+      busy: false, selectedSerial: '192.168.1.20:5555', operation: { status: 'success' }
+    })
+    expect(controller.getSnapshot().operationHistory).toHaveLength(1)
+  })
+
+  it('首次连接时端口不可达即停止，保留手动恢复入口', async () => {
+    const { controller, adb } = createController()
+    activeControllers.push(controller)
+    adb.tcpConnectOutput = 'failed to connect: No route to host'
+    adb.tcpProbe = { status: 'timeout', detail: '端口探测超时' }
+    await controller.initialize()
+    await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
+    expect(adb.calls.filter(({ args }) => args[0] === 'connect')).toHaveLength(1)
+    expect(adb.restartServerCalls).toBe(0)
+    expect(controller.getSnapshot().operation.status).toBe('error')
+    expect(controller.getSnapshot().busy).toBe(false)
+    expect(controller.getSnapshot().tcpRepair.phase).toBe('error')
+  })
+
+  it.each(['unauthorized', 'protocol fault', 'Connection refused'])('首次连接遇到 %s 不自动重启', async (output) => {
+    const { controller, adb } = createController()
+    activeControllers.push(controller)
+    adb.tcpConnectOutput = output
+    await controller.initialize()
+    await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
+    expect(adb.calls.filter(({ args }) => args[0] === 'connect')).toHaveLength(1)
+    expect(adb.restartServerCalls).toBe(0)
+    expect(controller.getSnapshot().operation.status).toBe('error')
+  })
+
   it('不会把 adb connect 的失败文本误记为成功', async () => {
     const { controller, adb } = createController()
     activeControllers.push(controller)
@@ -707,6 +767,8 @@ describe('主流程控制器', () => {
     await controller.initialize()
     await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
 
+    expect(adb.calls.filter(({ args }) => args[0] === 'connect')).toHaveLength(3)
+    expect(adb.restartServerCalls).toBe(1)
     expect(controller.getSnapshot().operation).toMatchObject({
       status: 'error',
       summary: 'TCP/IP 连接失败。',
@@ -726,7 +788,7 @@ describe('主流程控制器', () => {
     await controller.initialize()
     await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
     expect(controller.getSnapshot().tcpRepair).toMatchObject({
-      phase: 'available',
+      phase: 'error',
       failureKind: 'network',
       probe: 'not-run'
     })
@@ -734,7 +796,7 @@ describe('主流程控制器', () => {
     adb.tcpConnectOutput = 'connected to 192.168.1.20:5555\n'
     await controller.repairTcpConnection()
 
-    expect(adb.restartServerCalls).toBe(1)
+    expect(adb.restartServerCalls).toBe(2)
     expect(controller.getSnapshot().tcpRepair).toMatchObject({
       phase: 'success',
       probe: 'open',
@@ -842,11 +904,73 @@ describe('主流程控制器', () => {
     expect(deviceCalls.every(({ options }) => options.serial === DEVICE_SERIAL)).toBe(true)
   })
 
+  it.each([
+    ['已完整接收', 'a'.repeat(64), 1],
+    ['校验不一致', 'b'.repeat(64), 2]
+  ])('断线恢复后%s时按校验结果决定是否重传', async (_, hash, pushes) => {
+    const { controller, adb } = createController()
+    activeControllers.push(controller)
+    await controller.initialize()
+    await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
+    await controller.loadApk('/tmp/touchscreen.apk')
+    adb.pushFailure = 'adb: error: failed to read copy response'
+    adb.pushFailuresRemaining = 1
+    adb.remoteHash = String(hash)
+    await controller.executeCommand({ commandId: 'app.install' })
+    expect(controller.getSnapshot().operation.status).toBe('success')
+    expect(adb.calls.filter(({ args }) => args[0] === 'push')).toHaveLength(Number(pushes))
+    expect(adb.calls.some(({ args }) => args.join(' ').startsWith('shell dd'))).toBe(false)
+    expect(adb.calls.some(({ args }) => args[0] === 'disconnect')).toBe(true)
+    expect(adb.restartServerCalls).toBe(0)
+  })
+
+  it('持续传输断连最多尝试三次，不继续安装', async () => {
+    const { controller, adb } = createController()
+    activeControllers.push(controller)
+    await controller.initialize()
+    await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
+    await controller.loadApk('/tmp/touchscreen.apk')
+    adb.pushFailure = 'adb: device offline'
+    adb.remoteHash = 'b'.repeat(64)
+    await controller.executeCommand({ commandId: 'app.install' })
+    expect(adb.calls.filter(({ args }) => args[0] === 'push')).toHaveLength(3)
+    expect(adb.calls.some(({ args }) => args.join(' ').startsWith('shell pm install'))).toBe(false)
+    expect(controller.getSnapshot().operation.status).toBe('error')
+  })
+
+  it('重连失败时停止，不走备用通道或执行安装', async () => {
+    const { controller, adb } = createController()
+    activeControllers.push(controller)
+    await controller.initialize()
+    await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
+    await controller.loadApk('/tmp/touchscreen.apk')
+    adb.pushFailure = 'adb: device offline'
+    adb.connectionRecoveryFails = true
+    await controller.executeCommand({ commandId: 'app.install' })
+    expect(controller.getSnapshot().operation.summary).toContain('未能恢复')
+    expect(adb.calls.filter(({ args }) => args[0] === 'push')).toHaveLength(1)
+    expect(adb.calls.some(({ args }) => args.join(' ').startsWith('shell dd'))).toBe(false)
+    expect(adb.calls.some(({ args }) => args.join(' ').startsWith('shell pm install'))).toBe(false)
+  })
+
+  it.each([['a'.repeat(64), 'success'], ['b'.repeat(64), 'error']])('安装响应丢失只回读实际 APK，不重复安装 (%s)', async (hash, status) => {
+    const { controller, adb } = createController()
+    activeControllers.push(controller)
+    await controller.initialize()
+    await controller.connectTcp({ host: '192.168.1.20', port: 5555 })
+    await controller.loadApk('/tmp/touchscreen.apk')
+    adb.installResponseLost = true
+    adb.remoteHash = hash
+    await controller.executeCommand({ commandId: 'app.install' })
+    expect(controller.getSnapshot().operation.status).toBe(status)
+    expect(adb.calls.filter(({ args }) => args.join(' ').startsWith('shell pm install'))).toHaveLength(1)
+  })
+
   it('设备拒绝标准 adb push 时使用已确认的 su 0 流式传输 APK', async () => {
     const { controller, adb } = createController()
     activeControllers.push(controller)
     adb.suPath = '/system/xbin/su'
-    adb.pushFailure = 'adb: error: failed to read copy response\n'
+    adb.pushFailure = 'adb: error: reject push\n'
 
     await controller.initialize()
     await controller.loadApk('/tmp/touchscreen.apk')
@@ -878,7 +1002,7 @@ describe('主流程控制器', () => {
     const { controller, adb } = createController()
     activeControllers.push(controller)
     adb.suPath = '/system/xbin/su'
-    adb.pushFailure = 'adb: error: failed to read copy response\n'
+    adb.pushFailure = 'adb: error: reject push\n'
 
     await controller.initialize()
     await controller.loadApk('/tmp/touchscreen.apk')

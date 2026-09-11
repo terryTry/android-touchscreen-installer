@@ -300,7 +300,8 @@ export interface OperationState {
   summary: string
   suggestion: string | null
   stage: string | null
-  progress: number
+  /** null 表示当前阶段没有可用的真实百分比。 */
+  progress: number | null
   startedAt: string | null
   finishedAt: string | null
   durationMs: number | null

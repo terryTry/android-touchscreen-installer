@@ -129,6 +129,7 @@ async function createWindow(): Promise<void> {
   const deviceController = controller
   const menu = Menu.buildFromTemplate([
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    { label: '编辑', role: 'editMenu' },
     {
       label: '设备管理',
       submenu: [{

@@ -51,6 +51,7 @@ import type {
   RiskLevel,
   SystemDeploymentMode
 } from '../../shared/contracts'
+import { OperationProgress } from './OperationProgress'
 import { version as appVersion } from '../../../package.json'
 
 const TerminalPanel = lazy(() => import('./TerminalPanel'))
@@ -1187,10 +1188,7 @@ function App(): React.JSX.Element {
                 </span>
               </div>
               <div className="progress-row" aria-live="polite">
-                <progress max="100" value={snapshot.operation.progress} />
-                <span>
-                  {snapshot.operation.stage ?? '等待操作'} · {snapshot.operation.progress}%
-                </span>
+                <OperationProgress operation={snapshot.operation} />
               </div>
 
               {signatureConflictRecovery && (
@@ -1749,12 +1747,7 @@ function App(): React.JSX.Element {
                 <LoaderCircle className="spin" aria-hidden="true" />
                 <div>
                   <strong>{snapshot.operation.title}</strong>
-                  <span>{snapshot.operation.summary}</span>
-                  <progress max="100" value={snapshot.operation.progress} />
-                  <small>
-                    {snapshot.operation.stage ?? '正在执行'} ·{' '}
-                    {snapshot.operation.progress}%
-                  </small>
+                  <OperationProgress operation={snapshot.operation} />
                 </div>
               </section>
             )}

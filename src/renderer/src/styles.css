@@ -986,6 +986,13 @@ h1 {
   font-size: 11px;
 }
 
+.operation-progress-summary {
+  grid-column: 1 / -1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
 .recovery-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1363,6 +1370,7 @@ h1 {
 }
 
 .operation-running-card strong {
+  grid-column: 1 / -1;
   font-size: 12px;
 }
 
@@ -1378,8 +1386,7 @@ h1 {
 }
 
 .operation-running-card small {
-  grid-row: 2;
-  grid-column: 2;
+  grid-column: 1 / -1;
   font-variant-numeric: tabular-nums;
 }
 

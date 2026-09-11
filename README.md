@@ -4,7 +4,7 @@
 Android Platform-Tools，通过固定按钮完成设备连接、APK 安装、应用控制和默认
 Launcher 管理，并提供面向调试人员的手动 ADB 终端。
 
-当前版本：`0.2.0`
+当前版本：`0.2.1`
 
 版本变更见 [CHANGELOG](CHANGELOG.md)。
 

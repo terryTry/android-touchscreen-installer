@@ -47,14 +47,14 @@ const ERROR_MAPPINGS: Array<{ pattern: RegExp; error: FriendlyError }> = [
     }
   },
   {
-    pattern: /failed to read copy response|not a right of root|reject push|segmentation fault|signal 11|sigsegv/i,
+    pattern: /not a right of root|reject push|segmentation fault|signal 11|sigsegv/i,
     error: {
       summary: '设备端 adbd 拒绝文件传输。',
       suggestion: '普通 APK 可改用非 Root 的 shell 流式传输；系统分区文件仍需先在高风险确认后执行“获取 Root 权限”，并通过验证后再重试。'
     }
   },
   {
-    pattern: /device offline/i,
+    pattern: /device offline|failed to read copy response/i,
     error: {
       summary: '设备连接已中断。',
       suggestion: '先断开旧 TCP/IP 端点，再重新连接；如果是 USB，请重新插拔或确认设备仍在线。'

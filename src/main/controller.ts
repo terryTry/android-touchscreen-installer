@@ -38,6 +38,7 @@ import type {
   TcpEndpointProbe
 } from './adb-client'
 import { AppError } from './app-error'
+import { hashFile } from './file-hash'
 import type { ApkInspector, InspectedApk } from './apk-inspector'
 import { COMMAND_BY_ID, COMMAND_CATALOG } from './command-catalog'
 import { mapAdbError } from './errors'
@@ -269,9 +270,17 @@ function parseSuPath(output: string): string | null {
   return null
 }
 
-function isPushTransportFailure(result: AdbExecution): boolean {
+class TransferConnectionError extends AppError {
+  constructor(message: string) { super(message, '请恢复设备连接后重试。') }
+}
+
+function isConnectionFailure(result: AdbExecution): boolean {
+  return result.timedOut || /device offline|device .*not found|no devices|failed to read copy response|protocol fault|connection reset|reset by peer|closed|broken pipe|timed out/i.test(`${result.stdout}\n${result.stderr}`)
+}
+
+function isPushChannelRejection(result: AdbExecution): boolean {
   const output = `${result.stdout}\n${result.stderr}`
-  return /failed to read copy response|not a right of root|reject push|protocol fault|connection reset|reset by peer|device offline|segmentation fault|signal 11|sigsegv/i.test(
+  return /not a right of root|reject push|segmentation fault|signal 11|sigsegv/i.test(
     output
   )
 }
@@ -608,10 +617,17 @@ export class AppController {
     })
 
     try {
-      await this.connectTcpEndpoint(request)
+      await this.connectTcpWithRecovery(request)
       this.patch({ tcpRepair: idleTcpRepairState() })
       this.completeOperation(`已通过 TCP/IP 连接 ${endpoint}。`)
     } catch (error) {
+      this.patch({ tcpRepair: {
+        ...this.snapshot.tcpRepair,
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'TCP/IP 连接未完成。',
+        detail: error instanceof AppError ? error.suggestion : '请查看操作记录。',
+        serverPort: this.adb.serverPort
+      } })
       this.handleOperationError(error)
     } finally {
       this.patch({ busy: false })
@@ -704,29 +720,7 @@ export class AppController {
             message: `端口已可达，正在重启应用内 ADB Server（127.0.0.1:${this.adb.serverPort}）…`
           }
         })
-        const restarted = await this.adb.restartServer()
-        // 外部 Server 只做备用端口切换，不记录未实际执行的 kill-server。
-        if (restarted.kill.args.includes('-P')) {
-          this.recordTechnicalExecution('停止应用内 ADB Server', restarted.kill)
-        }
-        if (restarted.start.args.includes('-P')) {
-          this.recordTechnicalExecution('启动应用内 ADB Server', restarted.start)
-        }
-        this.patch({
-          adb: {
-            ...this.snapshot.adb,
-            serverPort: restarted.serverPort,
-            message: restarted.ok
-              ? `ADB 已就绪，当前 Server 端口 ${restarted.serverPort}`
-              : restarted.message
-          }
-        })
-        if (!restarted.ok) {
-          throw new AppError(
-            '应用内 ADB Server 未能重启。',
-            `${restarted.message} 请确认没有其他 ADB 工具占用该 Server，或重启安装助手后再试。`
-          )
-        }
+        await this.restartTcpServer()
       }
 
       this.patch({
@@ -776,6 +770,64 @@ export class AppController {
       this.patch({ busy: false })
     }
     return this.snapshot
+  }
+
+  private async connectTcpWithRecovery(request: TcpConnectRequest): Promise<void> {
+    const endpoint = `${request.host}:${request.port}`
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await this.connectTcpEndpoint(request)
+        return
+      } catch (error) {
+        const kind = this.snapshot.tcpRepair.failureKind
+        // 授权、端口协议和拒绝监听需要设备端处理，不用重启掩盖这些错误。
+        if (attempt === 2 || !['network', 'unknown', 'offline'].includes(kind ?? '') ||
+            (attempt === 1 && kind === 'offline')) throw error
+        this.updateOperation('连接暂未建立，正在检查设备端口并自动恢复，请稍候。', '自动恢复 TCP/IP 连接', null)
+        const probe = await this.adb.probeTcpEndpoint(request.host, request.port)
+        this.patch({ tcpRepair: {
+          ...this.snapshot.tcpRepair, phase: 'probing', probe: probe.status,
+          message: probe.detail, detail: probe.detail
+        } })
+        if (probe.status !== 'open') throw this.tcpProbeError(request, probe)
+        if (attempt === 0) {
+          if (kind === 'offline') {
+            const disconnect = await this.runStep('断开异常 TCP/IP 连接', ['disconnect', endpoint], { timeoutMs: 5_000 })
+            this.assertSuccess(disconnect, '无法断开失效连接。')
+          }
+          this.updateOperation('设备端口可达，正在重新连接（2/3）…', '重试 TCP/IP 连接', null)
+        } else {
+          this.updateOperation('设备端口可达，正在恢复应用 ADB Server 后连接（3/3）…', '恢复 ADB Server', null)
+          await this.restartTcpServer()
+        }
+      }
+    }
+  }
+
+  private async restartTcpServer(): Promise<void> {
+    const restarted = await this.adb.restartServer()
+    // 外部 Server 只做备用端口切换，不记录未实际执行的 kill-server。
+    if (restarted.kill.args.includes('-P')) {
+      this.recordTechnicalExecution('停止应用内 ADB Server', restarted.kill)
+    }
+    if (restarted.start.args.includes('-P')) {
+      this.recordTechnicalExecution('启动应用内 ADB Server', restarted.start)
+    }
+    this.patch({
+      adb: {
+        ...this.snapshot.adb,
+        serverPort: restarted.serverPort,
+        message: restarted.ok
+          ? `ADB 已就绪，当前 Server 端口 ${restarted.serverPort}`
+          : restarted.message
+      }
+    })
+    if (!restarted.ok) {
+      throw new AppError(
+        '应用内 ADB Server 未能重启。',
+        `${restarted.message} 请确认没有其他 ADB 工具占用该 Server，或重启安装助手后再试。`
+      )
+    }
   }
 
   private async connectTcpEndpoint(request: TcpConnectRequest): Promise<void> {
@@ -2064,18 +2116,47 @@ export class AppController {
     selected: InspectedApk
   ): Promise<string> {
     const remotePath = `/data/local/tmp/adb-tool-${selected.info.token.slice(0, 12)}.apk`
-    await this.transferFile(
-      serial,
-      selected.path,
-      remotePath,
-      '传输 APK',
-      240_000,
-      selected.path,
-      selected.info.fileSize,
-      true,
-      true
-    )
+    // 最多传输三次；只恢复当前 TCP 端点，不重启其他工具使用的 Server。
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await this.transferFile(serial, selected.path, remotePath, '传输 APK',
+          240_000, selected.path, selected.info.fileSize, true, true)
+        return remotePath
+      } catch (error) {
+        if (!(error instanceof TransferConnectionError)) throw error
+        if (attempt === 3 || !serial.includes(':')) {
+          throw new AppError('APK 传输因连接中断而停止，本次未执行安装。',
+            '自动恢复次数已用尽或当前为 USB 连接。请检查网络或 USB 连接后重试，请勿反复点击安装。')
+        }
+        this.updateOperation(`传输连接中断，正在恢复连接（${attempt}/2）。请保持设备联网。`, '恢复安装连接', null)
+        await this.recoverInstallConnection(serial)
+        this.updateOperation('连接已恢复，正在校验已传输的 APK，完整时无需重新发送。', '校验 APK', null)
+        if (await this.remoteApkMatches(serial, remotePath, selected)) return remotePath
+        this.updateOperation(`文件尚未完整传输，准备第 ${attempt + 1}/3 次传输。`, '重新传输 APK', null)
+      }
+    }
     return remotePath
+  }
+
+  private async recoverInstallConnection(serial: string): Promise<void> {
+    if (!serial.includes(':')) {
+      throw new AppError('设备连接中断。', '请恢复 USB 连接后重试。')
+    }
+    await this.runStep('断开失效安装连接', ['disconnect', serial], { timeoutMs: 5_000 })
+    const connect = await this.runStep('恢复安装连接', ['connect', serial], { timeoutMs: 10_000 })
+    const state = await this.runStep('确认安装连接', ['get-state'], { serial, timeoutMs: 5_000 })
+    if (this.adbExecutionFailed(connect) || state.stdout.trim() !== 'device' || this.adbExecutionFailed(state)) {
+      throw new AppError('未能恢复设备连接，安装流程已停止。', '请检查设备网络后重试；工具没有重启 ADB Server 或设备。')
+    }
+  }
+
+  private async remoteApkMatches(serial: string, remotePath: string, selected: InspectedApk): Promise<boolean> {
+    const size = await this.runStep('校验 APK 大小', ['shell', 'stat', '-c', '%s', remotePath], { serial, timeoutMs: 10_000 })
+    if (this.adbExecutionFailed(size) || size.stdout.trim() !== String(selected.info.fileSize)) return false
+    const digest = await this.runStep('校验 APK SHA-256', ['shell', 'sha256sum', remotePath], { serial, timeoutMs: 30_000 })
+    if (this.adbExecutionFailed(digest)) return false
+    const remoteHash = digest.stdout.trim().split(/\s+/)[0]
+    return remoteHash === await hashFile(selected.path)
   }
 
   private async transferFile(
@@ -2089,7 +2170,11 @@ export class AppController {
     showPushProgress = false,
     allowShellStreamFallback = false
   ): Promise<void> {
-    this.updateOperation(`正在${operation}…`, operation, 12)
+    this.updateOperation(
+      `正在${operation}（${(expectedSize / 1_000_000).toFixed(1)} MB）。等待设备接收完成，暂未提供传输百分比；请保持连接，无需重复操作。`,
+      operation,
+      null
+    )
     let progressBuffer = ''
     const pushOptions: AdbRunOptions = { serial, timeoutMs }
     if (showPushProgress) {
@@ -2112,8 +2197,9 @@ export class AppController {
       privatePath
     )
     if (!this.adbExecutionFailed(pushResult)) return
+    if (isConnectionFailure(pushResult)) throw new TransferConnectionError('传输连接中断')
 
-    if (!isPushTransportFailure(pushResult)) {
+    if (!isPushChannelRejection(pushResult)) {
       this.assertSuccess(pushResult, `${operation}失败。`)
     }
 
@@ -2144,7 +2230,7 @@ export class AppController {
     this.updateOperation(
       `标准 adb push 被设备拒绝，正在使用${channelLabel}…`,
       `${operation}（备用通道）`,
-      18
+      null
     )
     const streamArgs =
       streamMode.mode === 'su'
@@ -2170,6 +2256,7 @@ export class AppController {
       streamOptions,
       privatePath
     )
+    if (isConnectionFailure(streamResult)) throw new TransferConnectionError('备用传输连接中断')
     this.assertSuccess(streamResult, `${operation}失败。`)
     await this.verifyTransferredFileSize(serial, remotePath, expectedSize, operation)
   }
@@ -2217,7 +2304,7 @@ export class AppController {
     installFlags: string[],
     offerSignatureConflictRecovery: boolean
   ): Promise<InstalledPackageInfo> {
-    this.updateOperation('正在安装 APK…', '设备安装', 82)
+    this.updateOperation('APK 已传输完成，正在等待设备安装结果。安装期间可能没有进度回报，请保持连接，无需重复安装。', '设备安装', null)
     const installResult = await this.runStep(
       '安装 APK',
       ['shell', 'pm', 'install', ...installFlags, remotePath],
@@ -2227,7 +2314,17 @@ export class AppController {
       }
     )
     const installOutput = `${installResult.stdout}\n${installResult.stderr}`
-    if (installResult.exitCode !== 0 || !/\bSuccess\b/i.test(installOutput)) {
+    if (isConnectionFailure(installResult) && !/INSTALL_FAILED_|Failure\s*\[/i.test(installOutput)) {
+      this.updateOperation('安装响应中断，正在恢复连接并核对设备中的 APK；不会重复执行安装。', '核对安装结果', null)
+      await this.recoverInstallConnection(serial)
+      const installedPath = await this.runStep('读取已安装 APK 路径', ['shell', 'pm', 'path', selected.info.packageName], { serial, timeoutMs: 10_000 })
+      const paths = installedPath.stdout.trim().split(/\r?\n/)
+      const path = paths.length === 1 ? paths[0]?.replace(/^package:/, '') : null
+      if (this.adbExecutionFailed(installedPath) || !path || !/^\/data\/app\/[A-Za-z0-9_./=+~-]+\.apk$/.test(path) ||
+          !(await this.remoteApkMatches(serial, path, selected))) {
+        throw new AppError('安装响应中断，无法确认本次安装结果。', '已停止自动安装；请恢复稳定连接并刷新设备应用状态后再决定是否重试。')
+      }
+    } else if (installResult.exitCode !== 0 || !/\bSuccess\b/i.test(installOutput)) {
       const failedResult = { ...installResult, exitCode: installResult.exitCode || 1 }
       if (
         offerSignatureConflictRecovery &&
@@ -3822,14 +3919,14 @@ export class AppController {
     })
   }
 
-  private updateOperation(summary: string, stage: string, progress: number): void {
+  private updateOperation(summary: string, stage: string, progress: number | null): void {
     this.patch({
       operation: {
         ...this.snapshot.operation,
         status: 'running',
         summary,
         stage,
-        progress: Math.max(0, Math.min(100, progress))
+        progress: progress === null ? null : Math.max(0, Math.min(100, progress))
       }
     })
   }
