@@ -1251,7 +1251,7 @@ export class AppController {
   formatOperationSummary(operationId: string): string {
     const operation = this.requireHistoryOperation(operationId)
     return [
-      '安卓触摸屏安装助手 · 操作摘要',
+      '安卓触摸屏调试工具 · 操作摘要',
       '用途：说明做了什么、结果如何以及建议的下一步。',
       '',
       ...this.operationSummaryLines(operation)
@@ -1272,7 +1272,7 @@ export class AppController {
         : ['没有记录到 ADB 技术步骤。']
 
     return [
-      '安卓触摸屏安装助手 · 技术诊断详情',
+      '安卓触摸屏调试工具 · 技术诊断详情',
       '用途：提交给开发或技术支持人员排查问题。',
       '',
       ...this.operationSummaryLines(operation),

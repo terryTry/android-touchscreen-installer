@@ -127,7 +127,8 @@ class Harness {
       } satisfies AdbToolApi
     }, initial)
     await this.page.goto('/')
-    await expect(this.page.getByRole('heading', { name: '安卓触摸屏安装助手' })).toBeVisible()
+    await expect(this.page).toHaveTitle('安卓触摸屏调试工具')
+    await expect(this.page.getByRole('heading', { name: '安卓触摸屏调试工具' })).toBeVisible()
   }
 
   async reply<M extends Method>(method: M, value: Awaited<ReturnType<AdbToolApi[M]>>) {

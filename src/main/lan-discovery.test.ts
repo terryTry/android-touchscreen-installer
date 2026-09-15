@@ -22,6 +22,22 @@ describe('局域网发现', () => {
     expect((await discovery.search('test', 5555)).candidates).toEqual([{ host: '192.168.2.2', port: 5555, source: 'mdns', pairing: false }])
     expect(run).toHaveBeenCalledExactlyOnceWith(['mdns', 'services'], { timeoutMs: 4000 })
   })
+  it('指定 TCP 扫描端口不限制 mDNS 的动态连接和配对端口', async () => {
+    const probeTcpEndpoint = vi.fn(async () => ({ status: 'closed' }))
+    const discovery = new LanDiscovery({
+      run: async () => ({ exitCode: 0, timedOut: false, stdout: 'a _adb-tls-connect._tcp 192.168.2.2:37123\nb _adb-tls-pairing._tcp 192.168.2.2:39123' }),
+      probeTcpEndpoint
+    } as unknown as AdbGateway)
+    vi.spyOn(discovery, 'networks').mockReturnValue([network])
+    for (const port of [5555, 5556]) {
+      probeTcpEndpoint.mockClear()
+      expect((await discovery.search('test', port)).candidates).toEqual([
+        { host: '192.168.2.2', port: 37123, source: 'mdns', pairing: false },
+        { host: '192.168.2.2', port: 39123, source: 'mdns', pairing: true }
+      ])
+      expect(probeTcpEndpoint.mock.calls).toEqual(subnetHosts(network).map((host) => [host, port, 450]))
+    }
+  })
   it('取消后不收集迟到结果，并拒绝并发搜索', async () => {
     let resolve!: (value: { status: string }) => void
     const pending = new Promise<{ status: string }>((done) => { resolve = done })

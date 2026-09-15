@@ -352,7 +352,7 @@ describe('首版界面', () => {
   it('呈现已确认的主操作，不出现明确排除的功能', async () => {
     render(<App />)
 
-    expect(await screen.findByText('安卓触摸屏安装助手')).toBeInTheDocument()
+    expect(await screen.findByText('安卓触摸屏调试工具')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '返回' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Home' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '最近任务' })).toBeEnabled()

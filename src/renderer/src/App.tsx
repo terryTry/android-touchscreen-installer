@@ -381,7 +381,7 @@ function App(): React.JSX.Element {
     return (
       <main className="loading-screen">
         <LoaderCircle className="spin" aria-hidden="true" />
-        <span>正在启动安卓触摸屏安装助手…</span>
+        <span>正在启动安卓触摸屏调试工具…</span>
       </main>
     )
   }
@@ -675,7 +675,7 @@ function App(): React.JSX.Element {
             <MonitorSmartphone aria-hidden="true" />
           </span>
           <div>
-            <h1>安卓触摸屏安装助手</h1>
+            <h1>安卓触摸屏调试工具</h1>
             <p>内置 ADB · Windows x64 · V{appVersion}</p>
           </div>
         </div>

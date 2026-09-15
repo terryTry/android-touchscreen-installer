@@ -2280,7 +2280,13 @@ h1 {
 }
 
 .lan-search { margin-top: 12px; }
-.lan-search .tcp-form { flex-wrap: wrap; }
+.lan-search .tcp-form { grid-template-columns: minmax(220px, 1fr) auto auto; }
+.lan-search-advanced { grid-column: 1 / -1; }
+.lan-search-advanced summary { cursor: pointer; color: var(--primary); font-size: 13px; padding: 8px 0; }
+.lan-port-summary { margin-left: 12px; color: var(--muted); font-size: 12px; }
+.lan-search-advanced-fields { display: flex; align-items: center; gap: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: white; }
+.lan-search-advanced-fields .port-field { flex: 0 0 120px; }
+.lan-search-advanced-fields p { margin: 0; line-height: 1.6; }
 .lan-search select { max-width: 100%; }
 /* 搜索结果以独立卡片呈现，并在卡片内完成连接与反馈。 */
 .lan-results { margin-top: 18px; padding: 18px; border: 1px solid #bdd2fc; border-radius: 12px; background: var(--primary-soft); scroll-margin: 20px; }
@@ -2312,3 +2318,17 @@ h1 {
 .lan-panel-toggle > span:last-child { display: flex; align-items: center; gap: 6px; color: var(--primary); font-size: 13px; }
 .lan-panel-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .lan-panel-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 4px; }
+
+.lan-network-intro { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0 12px; color: var(--primary); }
+.lan-network-intro strong { color: #172033; font-size: 14px; }
+.lan-network-intro p { margin: 5px 0 0; color: #64748b; font-size: 12px; }
+.lan-network-context { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 12px 14px; margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; background: white; }
+.lan-network-context > div { display: grid; gap: 5px; min-width: 0; }
+.lan-network-context span { color: #64748b; font-size: 12px; }
+.lan-network-context strong { font-size: 13px; overflow-wrap: anywhere; }
+.lan-panel p.lan-active-connection { display: flex; align-items: center; gap: 6px; color: var(--success); margin-top: 10px; }
+.lan-search-feedback { margin-top: 12px; border-left: 3px solid #cbd5e1; padding-left: 10px; }
+.lan-search-feedback.is-scanning { border-color: var(--primary); }
+.lan-panel .lan-feedback-detail { color: #64748b; }
+.lan-results-source { display: block; color: #64748b; font-size: 12px; margin-bottom: 10px; }
+@media (max-width: 700px) { .lan-network-context { grid-template-columns: 1fr; } }

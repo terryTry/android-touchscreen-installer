@@ -1,7 +1,7 @@
 {
   "name": "android-touchscreen-installer",
   "version": "0.3.0-rc.1",
-  "description": "面向现场安装人员的安卓触摸屏 ADB 安装助手",
+  "description": "面向安装、调试与售后人员的安卓触摸屏 ADB 调试工具",
   "main": "out/main/index.js",
   "type": "module",
   "private": true,
@@ -54,7 +54,7 @@
   },
   "build": {
     "appId": "org.androidtouchscreeninstaller.desktop",
-    "productName": "安卓触摸屏安装助手",
+    "productName": "安卓触摸屏调试工具",
     "asar": true,
     "asarUnpack": [
       "node_modules/@h-t-m/app-inspect/**/*"
@@ -115,7 +115,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "安卓触摸屏安装助手",
+      "shortcutName": "安卓触摸屏调试工具",
       "deleteAppDataOnUninstall": false
     }
   }

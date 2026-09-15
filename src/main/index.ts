@@ -71,7 +71,7 @@ function configureContentSecurityPolicy(): void {
 async function createWindow(): Promise<void> {
   const preloadPath = fileURLToPath(new URL('../preload/index.cjs', import.meta.url))
   mainWindow = new BrowserWindow({
-    title: '安卓触摸屏安装助手',
+    title: '安卓触摸屏调试工具',
     width: 1180,
     height: 820,
     minWidth: 980,
