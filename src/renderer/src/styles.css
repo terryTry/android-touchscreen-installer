@@ -2278,3 +2278,37 @@ h1 {
   .terminal-actions button { font-size: 11px; padding: 6px; }
   .shortcut-fields { grid-template-columns: 1fr; }
 }
+
+.lan-search { margin-top: 12px; }
+.lan-search .tcp-form { flex-wrap: wrap; }
+.lan-search select { max-width: 100%; }
+/* 搜索结果以独立卡片呈现，并在卡片内完成连接与反馈。 */
+.lan-results { margin-top: 18px; padding: 18px; border: 1px solid #bdd2fc; border-radius: 12px; background: var(--primary-soft); scroll-margin: 20px; }
+.lan-results-heading h3 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 17px; }
+.lan-results-heading p { margin: 8px 0 16px; color: #475569; font-size: 13px; }
+.lan-count { border-radius: 16px; padding: 2px 9px; background: var(--primary); color: white; font-size: 13px; }
+.lan-device-list { display: grid; gap: 10px; }
+.lan-device-card { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: white; box-shadow: 0 2px 6px #17203308; }
+.lan-device-icon { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; color: var(--primary); background: var(--primary-soft); }
+.lan-device-info { flex: 1; min-width: 0; }
+.lan-device-info > strong { display: block; font-size: 18px; overflow-wrap: anywhere; }
+.lan-device-info > strong span { color: #64748b; font-size: 14px; }
+.lan-device-description { display: block; margin-top: 6px; font-size: 12px; color: #64748b; }
+.lan-device-info p { margin: 8px 0 0; font-size: 13px; }
+.lan-device-info [role="alert"] { color: var(--danger); }
+.lan-device-card.is-connected { border-color: #79cda2; background: #f4fcf7; }
+.lan-device-card.is-error { border-color: #e8a0a0; }
+.lan-device-info .lan-connected-message { color: var(--success); }
+.lan-device-card > button { flex-shrink: 0; }
+.lan-spinner { animation: lan-spin 1s linear infinite; }
+@keyframes lan-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .lan-spinner { animation: none; } }
+@media (max-width: 700px) {
+  .lan-device-card { flex-wrap: wrap; }
+  .lan-device-card > button { margin-left: auto; }
+}
+
+.lan-panel-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 4px 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.lan-panel-toggle > span:last-child { display: flex; align-items: center; gap: 6px; color: var(--primary); font-size: 13px; }
+.lan-panel-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.lan-panel-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 4px; }

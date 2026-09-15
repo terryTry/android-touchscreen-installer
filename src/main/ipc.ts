@@ -102,6 +102,19 @@ export function registerIpcHandlers(
     return controller.selectDevice(nullableSerialSchema.parse(rawSerial))
   })
 
+  ipcMain.handle(IPC_CHANNELS.listLanNetworks, (event) => {
+    assertTrustedSender(event, window)
+    return controller.listLanNetworks()
+  })
+  ipcMain.handle(IPC_CHANNELS.searchLan, (event, id: unknown, port: unknown) => {
+    assertTrustedSender(event, window)
+    return controller.searchLan(z.string().min(1).max(512).parse(id), z.number().int().min(1).max(65535).parse(port))
+  })
+  ipcMain.handle(IPC_CHANNELS.cancelLanSearch, (event) => {
+    assertTrustedSender(event, window)
+    controller.cancelLanSearch()
+  })
+
   ipcMain.handle(IPC_CHANNELS.connectTcp, async (event, rawRequest: unknown) => {
     assertTrustedSender(event, window)
     return controller.connectTcp(tcpRequestSchema.parse(rawRequest))

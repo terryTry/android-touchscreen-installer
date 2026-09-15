@@ -33,6 +33,9 @@ const api: AdbToolApi = {
     ipcRenderer.invoke(IPC_CHANNELS.setConnectionMode, mode),
   selectDevice: (serial: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.selectDevice, serial),
+  listLanNetworks: () => ipcRenderer.invoke(IPC_CHANNELS.listLanNetworks),
+  searchLan: (id, port) => ipcRenderer.invoke(IPC_CHANNELS.searchLan, id, port),
+  cancelLanSearch: () => ipcRenderer.invoke(IPC_CHANNELS.cancelLanSearch),
   connectTcp: (request: TcpConnectRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.connectTcp, request),
   repairTcpConnection: () => ipcRenderer.invoke(IPC_CHANNELS.repairTcp),

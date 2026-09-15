@@ -421,7 +421,14 @@ export interface ExecuteCommandRequest {
   systemDeploymentMode?: SystemDeploymentMode
 }
 
+export interface LanNetwork { id: string; label: string; address: string; netmask: string }
+export interface LanCandidate { host: string; port: number; source: 'mdns' | 'tcp'; pairing: boolean }
+export interface LanSearchResult { candidates: LanCandidate[]; cancelled: boolean; warnings: string[] }
+
 export interface AdbToolApi extends TerminalApi {
+  listLanNetworks: () => Promise<LanNetwork[]>
+  searchLan: (networkId: string, port: number) => Promise<LanSearchResult>
+  cancelLanSearch: () => Promise<void>
   getSnapshot: () => Promise<AppSnapshot>
   onSnapshot: (listener: (snapshot: AppSnapshot) => void) => () => void
   setConnectionMode: (mode: ConnectionMode) => Promise<AppSnapshot>

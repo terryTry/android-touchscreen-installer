@@ -1,6 +1,6 @@
 {
   "name": "android-touchscreen-installer",
-  "version": "0.2.1-rc.1",
+  "version": "0.3.0-rc.1",
   "description": "面向现场安装人员的安卓触摸屏 ADB 安装助手",
   "main": "out/main/index.js",
   "type": "module",
@@ -14,7 +14,11 @@
     "test:watch": "vitest",
     "build": "npm run typecheck && npm run test && electron-vite build",
     "build:win": "npm run build && electron-builder --win nsis --x64",
-    "postinstall": "node scripts/postinstall.mjs"
+    "postinstall": "node scripts/postinstall.mjs",
+    "test:e2e": "npm run typecheck:e2e && playwright test",
+    "typecheck:e2e": "tsc --project tsconfig.e2e.json --pretty",
+    "test:e2e:serve": "vite --config tests/e2e/vite.config.ts",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@devicefarmer/adbkit-apkreader": "3.2.4",
@@ -32,6 +36,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@testing-library/jest-dom": "7.0.0",
     "@testing-library/react": "16.3.2",
     "@types/node": "26.1.2",

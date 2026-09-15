@@ -1,3 +1,4 @@
+import { LanDiscovery } from './lan-discovery'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -505,6 +506,7 @@ export class AppController {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    this.cancelLanSearch()
     if (this.monitor) {
       clearInterval(this.monitor)
       this.monitor = null
@@ -590,6 +592,21 @@ export class AppController {
     if (serial) await this.hydrateSelectedDevice(serial)
     return this.snapshot
   }
+
+  private lanDiscovery: LanDiscovery | null = null
+
+  private getLanDiscovery(): LanDiscovery {
+    return this.lanDiscovery ??= new LanDiscovery(this.adb)
+  }
+
+  listLanNetworks() { return this.getLanDiscovery().networks() }
+  searchLan(id: string, port: number) {
+    if (this.disposed || this.snapshot.adb.state !== 'ready' || this.snapshot.busy) {
+      throw new Error('请等待 ADB 就绪及当前操作完成。')
+    }
+    return this.getLanDiscovery().search(id, port)
+  }
+  cancelLanSearch() { this.lanDiscovery?.cancel() }
 
   async connectTcp(request: TcpConnectRequest): Promise<AppSnapshot> {
     if (this.snapshot.busy) return this.snapshot

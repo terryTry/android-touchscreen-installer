@@ -1,3 +1,4 @@
+import { LanSearch } from './LanSearch'
 import {
   AlertCircle,
   ArrowLeft,
@@ -874,6 +875,22 @@ function App(): React.JSX.Element {
                 连接
               </button>
             </form>
+          )}
+          {snapshot.connectionMode === 'tcp' && (
+            <LanSearch
+              disabled={snapshot.busy || snapshot.adb.state !== 'ready'}
+              connectedEndpoint={snapshot.devices.some((device) => device.serial === snapshot.selectedSerial && device.state === 'device') ? snapshot.selectedSerial : null}
+              onConnect={async (host, port) => {
+                setTcpHost(host)
+                setTcpPort(String(port))
+                setClientError(null)
+                const next = await window.adbTool.connectTcp({ host, port })
+                setSnapshot(next)
+                if (next.selectedSerial !== `${host}:${port}` || !next.devices.some((device) => device.serial === next.selectedSerial && device.state === 'device')) {
+                  throw new Error(next.tcpRepair.message ?? '连接未成功，请检查设备授权或查看下方连接修复提示。')
+                }
+              }}
+            />
           )}
           {snapshot.connectionMode === 'tcp' && tcpRepair.endpoint && tcpRepair.phase !== 'idle' && (
             <section
